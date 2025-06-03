@@ -24,6 +24,8 @@ const initDb = () => {
             user_id TEXT NOT NULL,
             public_key BLOB NOT NULL,
             counter BIGINT DEFAULT 0,
+            name TEXT,
+            device_type TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             last_used DATETIME,
             FOREIGN KEY (user_id) REFERENCES users(id)
@@ -56,10 +58,12 @@ const statements = {
     updateUserLastLogin: db.prepare('UPDATE users SET last_login = datetime(\'now\') WHERE id = ?'),
 
     // Credential operations
-    addCredential: db.prepare('INSERT INTO credentials (credential_id, user_id, public_key) VALUES (?, ?, ?)'),
+    addCredential: db.prepare('INSERT INTO credentials (credential_id, user_id, public_key, name, device_type) VALUES (?, ?, ?, ?, ?)'),
     getCredentialById: db.prepare('SELECT * FROM credentials WHERE credential_id = ?'),
     getCredentialsByUser: db.prepare('SELECT * FROM credentials WHERE user_id = ?'),
     updateCredentialCounter: db.prepare('UPDATE credentials SET counter = ?, last_used = datetime(\'now\') WHERE credential_id = ?'),
+    updateCredentialName: db.prepare('UPDATE credentials SET name = ? WHERE credential_id = ?'),
+    deleteCredential: db.prepare('DELETE FROM credentials WHERE credential_id = ? AND user_id = ?'),
 
     // Challenge operations
     createChallenge: db.prepare('INSERT INTO challenges (challenge_id, user_id, challenge, expires_at, type) VALUES (?, ?, ?, datetime(\'now\', \'+5 minutes\'), ?)'),
@@ -77,10 +81,13 @@ module.exports = {
     updateUserLastLogin: (id) => statements.updateUserLastLogin.run(id),
 
     // Credential operations
-    addCredential: (credentialId, userId, publicKey) => statements.addCredential.run(credentialId, userId, publicKey),
+    addCredential: (credentialId, userId, publicKey, name, deviceType) => 
+        statements.addCredential.run(credentialId, userId, publicKey, name, deviceType),
     getCredentialById: (credentialId) => statements.getCredentialById.get(credentialId),
     getCredentialsByUser: (userId) => statements.getCredentialsByUser.all(userId),
     updateCredentialCounter: (credentialId, counter) => statements.updateCredentialCounter.run(counter, credentialId),
+    updateCredentialName: (credentialId, name) => statements.updateCredentialName.run(name, credentialId),
+    deleteCredential: (credentialId, userId) => statements.deleteCredential.run(credentialId, userId),
 
     // Challenge operations
     createChallenge: (challengeId, userId, challenge, type) => statements.createChallenge.run(challengeId, userId, challenge, type),

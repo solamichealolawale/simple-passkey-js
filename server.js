@@ -172,7 +172,7 @@ app.post('/webauthn/registerRequest', (req, res) => {
 });
 
 app.post('/webauthn/registerResponse', (req, res) => {
-    const { challengeId, credential } = req.body;
+    const { challengeId, credential, passkeyName } = req.body;
     
     try {
         // Retrieve and verify challenge
@@ -195,11 +195,16 @@ app.post('/webauthn/registerResponse', (req, res) => {
             return res.status(400).json({ error: "Origin verification failed" });
         }
 
-        // Store the credential
+        // Detect device type (this is a simple example - you might want to enhance this)
+        const deviceType = credential.response.authenticatorAttachment || 'unknown';
+
+        // Store the credential with name and device type
         db.addCredential(
             credential.id,
             storedChallenge.user_id,
-            Buffer.from(credential.response.attestationObject, 'base64url')
+            Buffer.from(credential.response.attestationObject, 'base64url'),
+            passkeyName || 'My Passkey',
+            deviceType
         );
 
         // Clean up the challenge
@@ -317,6 +322,71 @@ app.post('/webauthn/loginResponse', (req, res) => {
     } catch (error) {
         console.error('Login response error:', error);
         res.status(500).json({ error: "Login failed" });
+    }
+});
+
+// Get user's passkeys
+app.get('/auth/passkeys/:userId', (req, res) => {
+    try {
+        const { userId } = req.params;
+        
+        // Get user's credentials
+        const credentials = db.getCredentialsByUser(userId);
+        
+        // Format the response to exclude sensitive data
+        const passkeys = credentials.map(cred => ({
+            id: cred.credential_id,
+            name: cred.name || 'Unnamed Passkey',
+            deviceType: cred.device_type || 'unknown',
+            createdAt: cred.created_at,
+            lastUsed: cred.last_used
+        }));
+        
+        res.json({ passkeys });
+    } catch (error) {
+        console.error('Error fetching passkeys:', error);
+        res.status(500).json({ error: "Failed to fetch passkeys" });
+    }
+});
+
+// Update passkey name
+app.put('/auth/passkeys/:credentialId', (req, res) => {
+    try {
+        const { credentialId } = req.params;
+        const { name } = req.body;
+        
+        // Update the credential name
+        db.updateCredentialName(credentialId, name);
+        
+        res.json({ status: "success", message: "Passkey name updated" });
+    } catch (error) {
+        console.error('Error updating passkey:', error);
+        res.status(500).json({ error: "Failed to update passkey" });
+    }
+});
+
+// Delete passkey
+app.delete('/auth/passkeys/:userId/:credentialId', (req, res) => {
+    try {
+        const { userId, credentialId } = req.params;
+        
+        // Get user's credentials
+        const credentials = db.getCredentialsByUser(userId);
+        
+        // Don't allow deleting the last passkey
+        if (credentials.length <= 1) {
+            return res.status(400).json({ 
+                error: "Cannot delete the last passkey. Add another passkey first." 
+            });
+        }
+        
+        // Delete the credential
+        db.deleteCredential(credentialId, userId);
+        
+        res.json({ status: "success", message: "Passkey deleted" });
+    } catch (error) {
+        console.error('Error deleting passkey:', error);
+        res.status(500).json({ error: "Failed to delete passkey" });
     }
 });
 

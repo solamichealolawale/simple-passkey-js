@@ -146,6 +146,82 @@
         .logout-btn:hover {
             background: #dc2626;
         }
+
+        .passkeys-section {
+            margin: 24px 0;
+            padding: 16px;
+            background: #f8fafc;
+            border-radius: 8px;
+        }
+
+        .passkey-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px;
+            margin: 8px 0;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+        }
+
+        .passkey-info {
+            flex: 1;
+        }
+
+        .passkey-name {
+            font-weight: 500;
+            color: #1e293b;
+        }
+
+        .passkey-details {
+            font-size: 0.875rem;
+            color: #64748b;
+        }
+
+        .passkey-actions button {
+            padding: 6px 12px;
+            margin-left: 8px;
+            font-size: 0.875rem;
+        }
+
+        .add-passkey-btn {
+            background: #10b981;
+            margin-top: 16px;
+        }
+
+        .add-passkey-btn:hover {
+            background: #059669;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content {
+            position: relative;
+            background: white;
+            margin: 15% auto;
+            padding: 24px;
+            width: 90%;
+            max-width: 500px;
+            border-radius: 12px;
+        }
+
+        .cancel-btn {
+            background: #ef4444;
+            margin-left: 8px;
+        }
+
+        .cancel-btn:hover {
+            background: #dc2626;
+        }
     </style>
 </head>
 <body>
@@ -180,7 +256,26 @@
         <div class="user-info">
             <h2>Welcome, <span id="userDisplayName"></span>!</h2>
             <p>Email: <span id="userEmail"></span></p>
+            
+            <div class="passkeys-section">
+                <h3>Your Passkeys</h3>
+                <div id="passkeys-list"></div>
+                <button class="add-passkey-btn" onclick="handleAddPasskey()">Add New Passkey</button>
+            </div>
+            
             <button class="logout-btn" onclick="handleLogout()">Logout</button>
+        </div>
+
+        <div id="add-passkey-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <h3>Add New Passkey</h3>
+                <div class="form-group">
+                    <label for="newPasskeyName">Passkey Name</label>
+                    <input type="text" id="newPasskeyName" placeholder="e.g., Work Laptop, Phone">
+                </div>
+                <button onclick="confirmAddPasskey()">Add Passkey</button>
+                <button class="cancel-btn" onclick="closeAddPasskeyModal()">Cancel</button>
+            </div>
         </div>
 
         <div id="message" class="message" style="display: none;"></div>
@@ -207,13 +302,178 @@
             }, 5000);
         }
 
-        function showUserInfo(user) {
+        // Store current user info
+        let currentUser = null;
+
+        // Update the existing showUserInfo function
+        async function showUserInfo(user) {
+            currentUser = user; // Store the user info globally
             document.getElementById('userDisplayName').textContent = user.displayName;
             document.getElementById('userEmail').textContent = user.email;
             userInfo.classList.add('active');
             signupForm.classList.remove('active');
             signinForm.classList.remove('active');
             tabs.forEach(tab => tab.style.display = 'none');
+            
+            // Load and display passkeys
+            await loadPasskeys(user.id);
+        }
+
+        async function loadPasskeys(userId) {
+            try {
+                const response = await fetch(`${API_BASE}/auth/passkeys/${userId}`);
+                const data = await response.json();
+                
+                const passkeysListElement = document.getElementById('passkeys-list');
+                passkeysListElement.innerHTML = '';
+                
+                data.passkeys.forEach(passkey => {
+                    const lastUsed = passkey.lastUsed ? new Date(passkey.lastUsed).toLocaleDateString() : 'Never';
+                    const div = document.createElement('div');
+                    div.className = 'passkey-item';
+                    div.innerHTML = `
+                        <div class="passkey-info">
+                            <div class="passkey-name">${passkey.name}</div>
+                            <div class="passkey-details">
+                                Device: ${passkey.deviceType}<br>
+                                Last used: ${lastUsed}
+                            </div>
+                        </div>
+                        <div class="passkey-actions">
+                            <button onclick="renamePasskey('${passkey.id}')">Rename</button>
+                            <button onclick="deletePasskey('${passkey.id}')" class="cancel-btn">Delete</button>
+                        </div>
+                    `;
+                    passkeysListElement.appendChild(div);
+                });
+            } catch (error) {
+                console.error('Error loading passkeys:', error);
+                showMessage('Failed to load passkeys');
+            }
+        }
+
+        async function handleAddPasskey() {
+            document.getElementById('add-passkey-modal').style.display = 'block';
+        }
+
+        function closeAddPasskeyModal() {
+            document.getElementById('add-passkey-modal').style.display = 'none';
+        }
+
+        async function confirmAddPasskey() {
+            const passkeyName = document.getElementById('newPasskeyName').value.trim() || 'My Passkey';
+            
+            try {
+                // Get current user info
+                const userId = currentUser.id;
+                const email = currentUser.email;
+                
+                // Start WebAuthn registration
+                const regResponse = await fetch(`${API_BASE}/webauthn/registerRequest`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId, email })
+                });
+                
+                const regData = await regResponse.json();
+                if (!regResponse.ok) {
+                    throw new Error(regData.error || 'Failed to initiate registration');
+                }
+                
+                const { options, challengeId } = regData;
+                
+                // Create credentials
+                const credential = await navigator.credentials.create({
+                    publicKey: {
+                        ...options,
+                        challenge: base64URLDecode(options.challenge),
+                        user: {
+                            ...options.user,
+                            id: base64URLDecode(options.user.id)
+                        },
+                        excludeCredentials: options.excludeCredentials?.map(cred => ({
+                            ...cred,
+                            id: base64URLDecode(cred.id)
+                        }))
+                    }
+                });
+                
+                // Send response to server
+                const verificationResponse = await fetch(`${API_BASE}/webauthn/registerResponse`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        challengeId,
+                        passkeyName,
+                        credential: {
+                            id: credential.id,
+                            type: credential.type,
+                            response: {
+                                clientDataJSON: base64URLEncode(credential.response.clientDataJSON),
+                                attestationObject: base64URLEncode(credential.response.attestationObject),
+                                authenticatorAttachment: credential.response.authenticatorAttachment
+                            }
+                        }
+                    })
+                });
+                
+                const result = await verificationResponse.json();
+                if (!verificationResponse.ok) {
+                    throw new Error(result.error || 'Failed to verify registration');
+                }
+                
+                closeAddPasskeyModal();
+                showMessage('New passkey added successfully!', 'success');
+                await loadPasskeys(userId);
+            } catch (error) {
+                console.error('Add passkey error:', error);
+                showMessage(error.message);
+            }
+        }
+
+        async function renamePasskey(credentialId) {
+            const newName = prompt('Enter new name for this passkey:');
+            if (!newName) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/auth/passkeys/${credentialId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: newName })
+                });
+                
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.error || 'Failed to rename passkey');
+                }
+                
+                showMessage('Passkey renamed successfully!', 'success');
+                await loadPasskeys(currentUser.id);
+            } catch (error) {
+                console.error('Rename passkey error:', error);
+                showMessage(error.message);
+            }
+        }
+
+        async function deletePasskey(credentialId) {
+            if (!confirm('Are you sure you want to delete this passkey?')) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/auth/passkeys/${currentUser.id}/${credentialId}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.error || 'Failed to delete passkey');
+                }
+                
+                showMessage('Passkey deleted successfully!', 'success');
+                await loadPasskeys(currentUser.id);
+            } catch (error) {
+                console.error('Delete passkey error:', error);
+                showMessage(error.message);
+            }
         }
 
         // Tab Switching
@@ -378,7 +638,8 @@
                 }
                 
                 if (result.status === 'success') {
-                    showUserInfo(result.user);
+                    currentUser = result.user; // Set the current user
+                    await showUserInfo(result.user);
                     showMessage('Successfully signed in!', 'success');
                 } else {
                     throw new Error(result.error || 'Login failed');
@@ -391,6 +652,7 @@
 
         // Logout Handler
         function handleLogout() {
+            currentUser = null; // Clear the current user
             userInfo.classList.remove('active');
             tabs.forEach(tab => tab.style.display = 'block');
             tabs[0].click();
