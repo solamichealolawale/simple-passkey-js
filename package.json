@@ -1,0 +1,22 @@
+{
+  "name": "mock-server",
+  "version": "1.0.0",
+  "description": "Mocking passkeys",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "better-sqlite3": "^11.10.0",
+    "cors": "^2.8.5",
+    "crypto": "^1.0.1",
+    "express": "^5.1.0",
+    "fs": "0.0.1-security",
+    "path": "^0.12.7",
+    "sqlite3": "^5.1.7"
+  }
+}

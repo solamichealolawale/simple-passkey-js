@@ -1,0 +1,11 @@
+{
+  "users": {
+    "static_test_user_id": {
+      "id": "static_test_user_id",
+      "name": "testuser@example.com",
+      "displayName": "Test User",
+      "credentials": []
+    }
+  },
+  "credentials": []
+}
