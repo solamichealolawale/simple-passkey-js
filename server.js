@@ -152,12 +152,11 @@ app.post('/webauthn/registerRequest', (req, res) => {
                 { type: "public-key", alg: -257 } // RS256
             ],
             authenticatorSelection: {
-                authenticatorAttachment: "platform",
-                requireResidentKey: true,
+                residentKey: "preferred",
                 userVerification: "preferred"
             },
             timeout: 60000,
-            attestation: "direct",
+            attestation: "none",
             excludeCredentials
         };
 
@@ -251,7 +250,8 @@ app.post('/webauthn/loginRequest', (req, res) => {
             userVerification: "preferred",
             allowCredentials: existingCredentials.map(cred => ({
                 type: 'public-key',
-                id: cred.credential_id // Already Base64URL encoded
+                id: cred.credential_id,
+                transports: ["internal", "hybrid", "ble", "nfc", "usb"] // Add all possible transports
             }))
         };
 
