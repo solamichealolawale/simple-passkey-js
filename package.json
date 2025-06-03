@@ -18,5 +18,10 @@
     "fs": "0.0.1-security",
     "path": "^0.12.7",
     "sqlite3": "^5.1.7"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }
